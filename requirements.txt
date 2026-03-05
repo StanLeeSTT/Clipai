@@ -1,0 +1,39 @@
+# ClipAI Requirements
+# Install with: pip install -r requirements.txt
+
+# Web Framework
+flask>=2.3.0
+flask-cors>=4.0.0
+
+# Video Downloading (supports 1000+ sites)
+yt-dlp>=2023.11.0
+
+# Video/Audio Processing
+moviepy>=1.0.3
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# AI Transcription (Whisper)
+openai-whisper>=20231117
+
+# AI Text Analysis
+transformers>=4.35.0
+
+# PyTorch (CPU version - works on mobile)
+# Note: install manually with: pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0
+
+# Text-to-Speech (Voice Narration)
+gTTS>=2.4.0
+pyttsx3>=2.90
+
+# HTTP Requests
+requests>=2.31.0
+
+# Utilities
+tqdm>=4.66.0
+colorama>=0.4.6
+python-dotenv>=1.0.0
+
+# Optional: faster whisper (better performance)
+# faster-whisper>=0.9.0
