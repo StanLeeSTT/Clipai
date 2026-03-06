@@ -1,6 +1,7 @@
 """
 ClipAI — Video Downloader
 Scrapes and downloads videos from 1000+ platforms via yt-dlp
+Termux-hardened: automatic retries, socket timeouts, resume support
 """
 
 import os
@@ -38,7 +39,7 @@ class VideoDownloader:
                  progress_callback: Optional[Callable] = None) -> Optional[str]:
         """
         Download a video from a URL.
-        Returns the local filepath on success, None on failure.
+        Returns the local filepath on success, raises on failure.
         """
         os.makedirs(output_dir, exist_ok=True)
         filename_base = job_id or 'download'
@@ -53,7 +54,7 @@ class VideoDownloader:
     def _download_ytdlp(self, url: str, output_template: str,
                         output_dir: str, filename_base: str,
                         progress_callback: Optional[Callable]) -> Optional[str]:
-        """Download using yt-dlp Python library"""
+        """Download using yt-dlp Python library with Termux-hardened retry settings."""
         import yt_dlp
 
         downloaded_path = [None]
@@ -61,36 +62,59 @@ class VideoDownloader:
         def hook(d):
             if d['status'] == 'downloading' and progress_callback:
                 try:
-                    pct = d.get('downloaded_bytes', 0) / max(d.get('total_bytes', 1), 1)
+                    total = d.get('total_bytes') or d.get('total_bytes_estimate') or 1
+                    pct = min(d.get('downloaded_bytes', 0) / total * 100, 99)
                     progress_callback(pct)
                 except Exception:
                     pass
             elif d['status'] == 'finished':
                 downloaded_path[0] = d.get('filename') or d.get('info_dict', {}).get('filepath')
+                if progress_callback:
+                    progress_callback(99)
 
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
+            # ── Format: cap at 720p for faster/more reliable mobile downloads ──
+            'format': (
+                'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]'
+                '/bestvideo[height<=720]+bestaudio'
+                '/best[height<=720]'
+                '/best'
+            ),
             'outtmpl': output_template,
             'noplaylist': True,
             'progress_hooks': [hook],
             'quiet': True,
-            'no_warnings': True,
+            'no_warnings': False,
             'merge_output_format': 'mp4',
+            'format_sort': ['res:720', 'ext:mp4:m4a'],
+
+            # ── Termux network resilience (THE KEY FIXES) ──
+            'retries': 10,                    # retry full download up to 10×
+            'fragment_retries': 10,           # retry each fragment up to 10×
+            'retry_sleep_functions': {        # exponential back-off between retries
+                'http':     lambda n: min(4 ** n, 60),
+                'fragment': lambda n: min(2 ** n, 30),
+            },
+            'socket_timeout': 30,             # declare stall after 30s silence
+            'http_chunk_size': 1048576,       # 1 MiB chunks — faster recovery on drop
+            'continuedl': True,               # resume partial file instead of restarting
+            'concurrent_fragment_downloads': 1,  # single-threaded = more stable on mobile
+
+            # ── Post-processing ──
             'postprocessors': [{
                 'key': 'FFmpegVideoConvertor',
                 'preferedformat': 'mp4',
             }],
-            # Mobile-friendly: limit resolution
-            'format_sort': ['res:1080', 'ext:mp4:m4a'],
         }
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 if info:
-                    # Find the downloaded file
                     filepath = self._find_downloaded_file(output_dir, filename_base)
                     if filepath:
+                        if progress_callback:
+                            progress_callback(100)
                         logger.info(f"Downloaded: {filepath}")
                         return filepath
         except yt_dlp.utils.DownloadError as e:
@@ -104,19 +128,24 @@ class VideoDownloader:
 
     def _download_subprocess(self, url: str, output_template: str,
                               output_dir: str, filename_base: str) -> Optional[str]:
-        """Fallback: use yt-dlp as a subprocess"""
+        """Fallback: use yt-dlp as a subprocess with retry flags."""
         import subprocess
         cmd = [
             'yt-dlp',
-            '--format', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            '--format', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]/best',
             '--output', output_template,
             '--no-playlist',
             '--merge-output-format', 'mp4',
+            '--retries', '10',
+            '--fragment-retries', '10',
+            '--socket-timeout', '30',
+            '--concurrent-fragments', '1',
+            '--continue',                     # resume partial downloads
             url
         ]
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
             if result.returncode == 0:
                 filepath = self._find_downloaded_file(output_dir, filename_base)
                 if filepath:
@@ -124,12 +153,12 @@ class VideoDownloader:
             else:
                 raise Exception(f"yt-dlp failed: {result.stderr[:300]}")
         except subprocess.TimeoutExpired:
-            raise Exception("Download timed out (5 min). Try a shorter video.")
+            raise Exception("Download timed out (10 min). Try a shorter video or check your connection.")
 
         return None
 
     def _find_downloaded_file(self, output_dir: str, filename_base: str) -> Optional[str]:
-        """Find the downloaded file by scanning the output directory"""
+        """Find the downloaded file by scanning the output directory."""
         video_exts = {'.mp4', '.mkv', '.webm', '.mov', '.avi', '.m4v'}
         for f in os.listdir(output_dir):
             if f.startswith(filename_base):
@@ -139,7 +168,7 @@ class VideoDownloader:
         return None
 
     def get_video_info(self, url: str) -> Optional[dict]:
-        """Get video metadata without downloading"""
+        """Get video metadata without downloading."""
         if not self.yt_dlp_available:
             return None
         try:
@@ -147,10 +176,10 @@ class VideoDownloader:
             with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
                 info = ydl.extract_info(url, download=False)
                 return {
-                    'title': info.get('title', 'Unknown'),
-                    'duration': info.get('duration', 0),
-                    'uploader': info.get('uploader', 'Unknown'),
-                    'thumbnail': info.get('thumbnail', ''),
+                    'title':      info.get('title', 'Unknown'),
+                    'duration':   info.get('duration', 0),
+                    'uploader':   info.get('uploader', 'Unknown'),
+                    'thumbnail':  info.get('thumbnail', ''),
                     'view_count': info.get('view_count', 0),
                 }
         except Exception as e:
@@ -159,6 +188,6 @@ class VideoDownloader:
 
     @staticmethod
     def is_supported_url(url: str) -> bool:
-        """Check if a URL is likely supported"""
+        """Check if a URL is likely supported."""
         url_lower = url.lower()
         return any(site in url_lower for site in VideoDownloader.SUPPORTED_SITES)
