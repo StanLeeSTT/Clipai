@@ -1,4 +1,4 @@
-        """
+"""
 ClipAI — Intelligent Video Clipping Engine
 Main Flask Application
 """
