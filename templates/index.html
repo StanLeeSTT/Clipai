@@ -756,6 +756,38 @@
             <option value="square">Square (1:1) Instagram</option>
           </select>
         </div>
+        <div class="setting-item">
+          <label>🎬 Transition Effect</label>
+          <select class="select" id="transition">
+            <option value="fade" selected>Fade (smooth)</option>
+            <option value="fadeblack">Fade through Black</option>
+            <option value="fadewhite">Fade through White</option>
+            <option value="zoomin">Zoom In (Ken Burns)</option>
+            <option value="zoomout">Zoom Out (Ken Burns)</option>
+            <option value="blur">Blur Fade</option>
+            <option value="random">🎲 Random each clip</option>
+          </select>
+        </div>
+        <div class="setting-item">
+          <label>🎵 Background Music</label>
+          <select class="select" id="musicMood" onchange="toggleMusicVolume(this.value)">
+            <option value="none" selected>No Music</option>
+            <option value="hype">🔥 Hype (fast bass beat)</option>
+            <option value="dramatic">🎬 Dramatic (cinematic bass)</option>
+            <option value="motivational">💪 Motivational</option>
+            <option value="chill">😌 Chill (lo-fi bass)</option>
+            <option value="dark">🌑 Dark atmospheric</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="musicVolumeWrap" style="display:none; margin-top:14px;">
+        <label style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:8px;">
+          🎚️ Music Volume — <span id="musicVolumeVal">15%</span>
+        </label>
+        <input type="range" id="musicVolume" min="5" max="40" value="15"
+          oninput="document.getElementById('musicVolumeVal').textContent=this.value+'%'"
+          style="width:100%; accent-color:var(--accent); cursor:pointer; margin-top:4px;">
       </div>
 
       <div style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
@@ -771,13 +803,24 @@
         </div>
         <div class="toggle-row">
           <div>
-            <div class="toggle-label">🎙️ AI Voice Narration</div>
-            <div class="toggle-sub">Random voice matched to content mood</div>
+            <div class="toggle-label">🎙️ Deep Bass Voice Narration</div>
+            <div class="toggle-sub">TikTok-style deep male voice over clips</div>
           </div>
           <label class="toggle">
-            <input type="checkbox" id="addVoice">
+            <input type="checkbox" id="addVoice" onchange="toggleVoiceSelect(this.checked)">
             <span class="toggle-slider"></span>
           </label>
+        </div>
+        <div id="voiceSelectWrap" style="display:none; padding:12px 0 4px;">
+          <label style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:8px;">Voice Style</label>
+          <select class="select" id="voiceStyle">
+            <option value="DeepBass" selected>🎙️ DeepBass — TikTok default</option>
+            <option value="TikTokNarrator">🎤 TikTok Narrator</option>
+            <option value="Cinema">🎬 Cinema — movie trailer deep</option>
+            <option value="Hype">⚡ Hype — energetic</option>
+            <option value="Smooth">😎 Smooth — cool</option>
+            <option value="Maya">💫 Maya — female warm</option>
+          </select>
         </div>
       </div>
     </div>
@@ -867,6 +910,14 @@ function switchTab(tab) {
 }
 
 // ─── Duration pills ───────────────────────────────────────
+function toggleMusicVolume(val) {
+  document.getElementById('musicVolumeWrap').style.display = val !== 'none' ? 'block' : 'none';
+}
+
+function toggleVoiceSelect(checked) {
+  document.getElementById('voiceSelectWrap').style.display = checked ? 'block' : 'none';
+}
+
 function toggleDuration(val, el) {
   el.classList.toggle('selected');
   if (el.classList.contains('selected')) {
@@ -945,6 +996,10 @@ async function submitUrl(url) {
       add_subtitles: document.getElementById('addSubtitles').checked,
       add_voice: document.getElementById('addVoice').checked,
       orientation: document.getElementById('orientation').value,
+      transition: document.getElementById('transition').value,
+      music_mood: document.getElementById('musicMood').value,
+      music_volume: parseInt(document.getElementById('musicVolume').value) / 100,
+      voice_style: document.getElementById('voiceStyle').value,
     };
 
     const r = await fetch('/api/download', {
@@ -972,6 +1027,10 @@ async function submitFile() {
     form.append('add_subtitles', document.getElementById('addSubtitles').checked);
     form.append('add_voice', document.getElementById('addVoice').checked);
     form.append('orientation', document.getElementById('orientation').value);
+    form.append('transition', document.getElementById('transition').value);
+    form.append('music_mood', document.getElementById('musicMood').value);
+    form.append('music_volume', parseInt(document.getElementById('musicVolume').value) / 100);
+    form.append('voice_style', document.getElementById('voiceStyle').value);
 
     const r = await fetch('/api/upload', { method: 'POST', body: form });
     const data = await r.json();
