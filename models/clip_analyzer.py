@@ -1,17 +1,18 @@
 """
 ClipAI — Clip Analyzer
-Uses Whisper for transcription + AI scoring to find the best moments
+Uses faster-whisper (no torch needed!) for transcription + AI scoring.
+faster-whisper is faster, lighter, and works on all Android CPUs.
 """
 
 import os
 import json
 import logging
 import re
+import subprocess
 from typing import List, Dict, Optional, Callable
 
 logger = logging.getLogger('clipai.analyzer')
 
-# High-engagement keyword patterns
 HOOK_PATTERNS = [
     r'\b(secret|reveal|you won\'t believe|shocking|amazing|incredible|never|always|everyone)\b',
     r'\b(how to|tip|trick|hack|method|strategy|mistake|wrong|right way)\b',
@@ -26,44 +27,84 @@ FILLER_PATTERNS = [
     r'\b(err+|ahh+|uhh+)\b',
 ]
 
+# Auto-detect best available whisper backend
+WHISPER_BACKEND = None
+
+def _detect_whisper():
+    global WHISPER_BACKEND
+    try:
+        import faster_whisper
+        WHISPER_BACKEND = 'faster_whisper'
+        logger.info("✓ faster-whisper backend available (no torch needed)")
+        return
+    except ImportError:
+        pass
+    try:
+        import whisper
+        WHISPER_BACKEND = 'openai_whisper'
+        logger.info("✓ openai-whisper backend available")
+        return
+    except ImportError:
+        pass
+    logger.warning("No whisper backend — using FFmpeg-only mode")
+
+_detect_whisper()
+
 
 class ClipAnalyzer:
-    """
-    AI-powered video analysis engine.
-    Transcribes audio, detects scene changes, and scores segments.
-    """
-
     def __init__(self):
-        self.whisper_model = None
+        self.model = None
+        self.backend = WHISPER_BACKEND
         self.model_size = os.environ.get('WHISPER_MODEL', 'base')
-        self._load_whisper()
+        self._load_model()
 
-    def _load_whisper(self):
+    def _load_model(self):
+        if self.backend == 'faster_whisper':
+            self._load_faster_whisper()
+        elif self.backend == 'openai_whisper':
+            self._load_openai_whisper()
+
+    def _load_faster_whisper(self):
+        try:
+            from faster_whisper import WhisperModel
+            logger.info(f"Loading faster-whisper {self.model_size}...")
+            self.model = WhisperModel(
+                self.model_size,
+                device="cpu",
+                compute_type="int8",
+                download_root=os.path.join("models", "weights"),
+            )
+            logger.info("✓ faster-whisper ready")
+        except Exception as e:
+            logger.error(f"faster-whisper load failed: {e}")
+            self.model = None
+            self.backend = None
+
+    def _load_openai_whisper(self):
         try:
             import whisper
-            logger.info(f"Loading Whisper {self.model_size} model...")
-            self.whisper_model = whisper.load_model(self.model_size)
-            logger.info("Whisper loaded")
-        except ImportError:
-            logger.warning("openai-whisper not installed — using basic audio analysis")
+            logger.info(f"Loading openai-whisper {self.model_size}...")
+            self.model = whisper.load_model(self.model_size)
+            logger.info("✓ openai-whisper ready")
         except Exception as e:
-            logger.warning(f"Whisper failed to load: {e}")
+            logger.warning(f"openai-whisper load failed: {e}")
+            self.model = None
+            self.backend = None
 
     def analyze(self, filepath: str, progress_callback: Optional[Callable] = None) -> List[Dict]:
-        """
-        Analyze video and return scored segments.
-        Returns list of: {start, end, transcript, score, keywords, summary}
-        """
         if progress_callback:
             progress_callback(0.05)
 
-        # Step 1: Transcribe audio
-        transcript_data = self._transcribe(filepath, progress_callback)
+        if self.model and self.backend == 'faster_whisper':
+            transcript_data = self._transcribe_faster(filepath)
+        elif self.model and self.backend == 'openai_whisper':
+            transcript_data = self._transcribe_openai(filepath)
+        else:
+            transcript_data = {'segments': [], 'text': ''}
 
         if progress_callback:
             progress_callback(0.6)
 
-        # Step 2: Score and segment
         segments = self._build_segments(transcript_data, filepath)
 
         if progress_callback:
@@ -72,51 +113,74 @@ class ClipAnalyzer:
         logger.info(f"Found {len(segments)} candidate segments")
         return segments
 
-    def _transcribe(self, filepath: str, progress_cb=None) -> Dict:
-        """Transcribe audio using Whisper"""
-        if self.whisper_model:
-            try:
-                logger.info("Transcribing audio...")
-                result = self.whisper_model.transcribe(
-                    filepath,
-                    task='transcribe',
-                    word_timestamps=True,
-                    verbose=False,
-                )
-                return result
-            except Exception as e:
-                logger.warning(f"Whisper transcription failed: {e}")
+    def _transcribe_faster(self, filepath: str) -> Dict:
+        try:
+            logger.info("Transcribing with faster-whisper (CPU int8)...")
 
-        # Fallback: return empty transcription
-        return {'segments': [], 'text': ''}
+            # Extract 16kHz mono audio — whisper works best with this
+            audio_path = os.path.join('uploads', f'_audio_{os.path.basename(filepath)}.wav')
+            cmd = ['ffmpeg', '-y', '-i', filepath,
+                   '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', audio_path]
+            subprocess.run(cmd, capture_output=True, timeout=120)
+
+            source = audio_path if os.path.exists(audio_path) else filepath
+
+            segments_gen, info = self.model.transcribe(
+                source,
+                beam_size=3,
+                language=None,
+                vad_filter=True,
+                vad_parameters=dict(min_silence_duration_ms=500),
+                word_timestamps=True,
+            )
+
+            raw_segments = []
+            for seg in segments_gen:
+                raw_segments.append({
+                    'start': seg.start,
+                    'end': seg.end,
+                    'text': seg.text.strip(),
+                })
+
+            try:
+                if os.path.exists(audio_path):
+                    os.remove(audio_path)
+            except Exception:
+                pass
+
+            full_text = ' '.join(s['text'] for s in raw_segments)
+            logger.info(f"Transcribed {len(raw_segments)} segments | lang: {info.language}")
+            return {'segments': raw_segments, 'text': full_text}
+
+        except Exception as e:
+            logger.error(f"faster-whisper failed: {e}")
+            return {'segments': [], 'text': ''}
+
+    def _transcribe_openai(self, filepath: str) -> Dict:
+        try:
+            result = self.model.transcribe(filepath, task='transcribe',
+                                           word_timestamps=True, verbose=False)
+            return result
+        except Exception as e:
+            logger.error(f"openai-whisper failed: {e}")
+            return {'segments': [], 'text': ''}
 
     def _build_segments(self, transcript_data: Dict, filepath: str) -> List[Dict]:
-        """
-        Build clip segments from transcript data.
-        Groups whisper segments into clips of varying lengths.
-        """
         raw_segments = transcript_data.get('segments', [])
-
         if not raw_segments:
             return self._build_segments_no_transcript(filepath)
 
         segments = []
-        target_lengths = [15, 30, 60]  # seconds
-
-        for tlen in target_lengths:
+        for tlen in [15, 30, 60]:
             clips = self._group_into_clips(raw_segments, tlen)
             for clip in clips:
-                score = self._score_segment(clip['text'], clip['end'] - clip['start'])
-                clip['score'] = score
+                clip['score'] = self._score_segment(clip['text'], clip['end'] - clip['start'])
                 clip['target_duration'] = tlen
                 segments.append(clip)
 
-        # Deduplicate overlapping segments (keep higher scores)
-        segments = self._deduplicate(segments)
-        return sorted(segments, key=lambda x: x['score'], reverse=True)
+        return sorted(self._deduplicate(segments), key=lambda x: x['score'], reverse=True)
 
-    def _group_into_clips(self, raw_segs: List[Dict], target_len: float) -> List[Dict]:
-        """Group transcript segments into clips of ~target_len seconds"""
+    def _group_into_clips(self, raw_segs, target_len):
         clips = []
         i = 0
         while i < len(raw_segs):
@@ -126,146 +190,96 @@ class ClipAnalyzer:
             while j < len(raw_segs):
                 seg = raw_segs[j]
                 clip_text.append(seg['text'].strip())
-                current_duration = seg['end'] - start_time
-                if current_duration >= target_len:
+                if seg['end'] - start_time >= target_len:
                     break
                 j += 1
-
             end_time = raw_segs[min(j, len(raw_segs)-1)]['end']
             text = ' '.join(clip_text).strip()
-
             if text and (end_time - start_time) >= 5:
                 clips.append({
-                    'start': start_time,
-                    'end': end_time,
-                    'text': text,
-                    'transcript': text,
+                    'start': start_time, 'end': end_time,
+                    'text': text, 'transcript': text,
                     'summary': self._summarize(text),
                     'word_count': len(text.split()),
                 })
-
-            step = max(1, j - i - 2)  # Sliding window with overlap
-            i += step
-
+            i += max(1, j - i - 2)
         return clips
 
-    def _build_segments_no_transcript(self, filepath: str) -> List[Dict]:
-        """Fallback segment builder using video duration only"""
+    def _build_segments_no_transcript(self, filepath):
         try:
-            import subprocess, json
-            cmd = ['ffprobe', '-v', 'quiet', '-print_format', 'json',
-                   '-show_format', '-show_streams', filepath]
+            cmd = ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', filepath]
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            data = json.loads(r.stdout)
-            duration = float(data['format']['duration'])
+            duration = float(json.loads(r.stdout)['format']['duration'])
         except Exception:
-            duration = 120.0  # assume 2 min
+            duration = 120.0
 
         segments = []
         for target in [15, 30, 60]:
             if duration < target + 5:
                 continue
             margin = duration * 0.1
-            usable = duration - 2*margin
+            usable = duration - 2 * margin
             count = max(1, int(usable / target))
             for i in range(count):
                 start = margin + i * (usable / count)
                 end = min(start + target, duration - 1)
-                if end - start < 5:
-                    continue
-                segments.append({
-                    'start': start, 'end': end,
-                    'text': '', 'transcript': '',
-                    'summary': f'Segment at {int(start)}s',
-                    'score': 0.5 - (0.1 * i),  # first segments score higher
-                    'target_duration': target,
-                })
-
+                if end - start >= 5:
+                    segments.append({
+                        'start': start, 'end': end, 'text': '', 'transcript': '',
+                        'summary': f'Segment at {int(start)}s',
+                        'score': round(0.5 - 0.05 * i, 2), 'target_duration': target,
+                    })
         return segments
 
-    def _score_segment(self, text: str, duration: float) -> float:
-        """Score a text segment for virality/engagement potential"""
+    def _score_segment(self, text, duration):
         if not text:
             return 0.3
-
-        score = 0.4  # Base score
+        score = 0.4
         text_lower = text.lower()
         words = text.split()
         word_count = len(words)
-
-        # Hook keywords boost
-        hook_count = 0
-        for pattern in HOOK_PATTERNS:
-            matches = len(re.findall(pattern, text_lower))
-            hook_count += matches
+        hook_count = sum(len(re.findall(p, text_lower)) for p in HOOK_PATTERNS)
         score += min(0.25, hook_count * 0.05)
-
-        # Penalize excessive fillers
         filler_count = sum(len(re.findall(p, text_lower)) for p in FILLER_PATTERNS)
-        filler_ratio = filler_count / max(1, word_count)
-        score -= min(0.15, filler_ratio * 0.5)
-
-        # Speaking pace score (ideal: 120-180 words/min)
+        score -= min(0.15, (filler_count / max(1, word_count)) * 0.5)
         if duration > 0:
             wpm = (word_count / duration) * 60
             if 120 <= wpm <= 180:
                 score += 0.1
             elif wpm > 200:
-                score -= 0.05  # too fast
-
-        # Sentence variety (questions, exclamations)
-        if '?' in text:
+                score -= 0.05
+        score += min(0.1, text.count('?') * 0.04)
+        score += min(0.06, text.count('!') * 0.02)
+        numbers = re.findall(r'\b\d+(?:\.\d+)?%?\b', text)
+        score += min(0.08, len(numbers) * 0.02)
+        emotional = ['incredible','insane','crazy','amazing','shocking','hilarious',
+                     'devastating','legendary','perfect','worst','best','never','always']
+        score += min(0.1, sum(0.02 for w in emotional if w in text_lower))
+        if 30 <= word_count <= 150:
             score += 0.05
-        if '!' in text:
-            score += 0.03
+        elif word_count < 10:
+            score -= 0.15
+        return round(min(1.0, max(0.0, score)), 3)
 
-        # Penalize very short or very long text
-        if word_count < 10:
-            score -= 0.1
-        elif word_count > 250:
-            score -= 0.05
-
-        # Emotional words
-        emotional = ['love', 'hate', 'fear', 'excited', 'angry', 'happy', 'sad',
-                     'amazing', 'terrible', 'best', 'worst', 'perfect', 'horrible']
-        for word in emotional:
-            if word in text_lower:
-                score += 0.02
-
-        return min(1.0, max(0.0, score))
-
-    def _summarize(self, text: str) -> str:
-        """Create a short summary of the segment"""
+    def _summarize(self, text):
         words = text.split()
         if len(words) <= 15:
             return text
-        # Take first sentence or first 15 words
         sentences = text.split('.')
         if sentences and len(sentences[0].split()) >= 5:
             return sentences[0].strip()[:100]
         return ' '.join(words[:15]) + '...'
 
-    def _deduplicate(self, segments: List[Dict]) -> List[Dict]:
-        """Remove heavily overlapping segments, keeping higher-scored ones"""
+    def _deduplicate(self, segments):
         if not segments:
             return segments
-        
-        sorted_segs = sorted(segments, key=lambda x: x.get('score', 0), reverse=True)
         kept = []
-        
-        for seg in sorted_segs:
-            overlap = False
-            for k in kept:
-                # Check if >50% overlap
-                overlap_start = max(seg['start'], k['start'])
-                overlap_end = min(seg['end'], k['end'])
-                if overlap_end > overlap_start:
-                    overlap_duration = overlap_end - overlap_start
-                    seg_duration = seg['end'] - seg['start']
-                    if overlap_duration / seg_duration > 0.5:
-                        overlap = True
-                        break
+        for seg in sorted(segments, key=lambda x: x.get('score', 0), reverse=True):
+            overlap = any(
+                (min(seg['end'], k['end']) - max(seg['start'], k['start'])) /
+                max(seg['end'] - seg['start'], 0.1) > 0.5
+                for k in kept
+            )
             if not overlap:
                 kept.append(seg)
-
         return kept
