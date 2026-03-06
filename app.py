@@ -117,6 +117,10 @@ def upload_video():
         'add_subtitles': request.form.get('add_subtitles', 'true') == 'true',
         'add_voice': request.form.get('add_voice', 'false') == 'true',
         'orientation': request.form.get('orientation', 'vertical'),
+        'transition': request.form.get('transition', 'fade'),
+        'music_mood': request.form.get('music_mood', 'none'),
+        'music_volume': float(request.form.get('music_volume', '0.15')),
+        'voice_style': request.form.get('voice_style', 'DeepBass'),
     }
 
     jobs[job_id] = {
@@ -148,6 +152,10 @@ def download_from_url():
         'add_subtitles': data.get('add_subtitles', True),
         'add_voice': data.get('add_voice', False),
         'orientation': data.get('orientation', 'vertical'),
+        'transition': data.get('transition', 'fade'),
+        'music_mood': data.get('music_mood', 'none'),
+        'music_volume': data.get('music_volume', 0.15),
+        'voice_style': data.get('voice_style', 'DeepBass'),
     }
 
     jobs[job_id] = {
@@ -264,13 +272,18 @@ def _process_full(job_id, filepath, settings):
 
         fname = f"{job_id}_clip{i+1}_{int(seg['start'])}s.mp4"
         cpath = os.path.join(config.CLIPS_FOLDER, fname)
-        ok = processor.cut_clip(filepath, cpath, seg['start'], seg['end'],
-                                settings.get('orientation', 'vertical'))
+        ok = processor.cut_clip(
+            filepath, cpath, seg['start'], seg['end'],
+            orientation=settings.get('orientation', 'vertical'),
+            transition=settings.get('transition', 'fade'),
+            music_mood=settings.get('music_mood', 'none'),
+            music_volume=settings.get('music_volume', 0.15),
+        )
         if ok:
             if settings.get('add_subtitles') and seg.get('transcript'):
                 SubtitleEngine().burn_subtitles(cpath, seg['transcript'])
             if settings.get('add_voice'):
-                VoiceEngine().add_narration(cpath, seg.get('summary', ''), video_content=seg)
+                VoiceEngine().add_narration(cpath, seg.get('summary', ''), video_content=seg, voice_name=settings.get('voice_style', 'DeepBass'))
 
             clips.append({
                 'filename': fname, 'url': f'/clips/{fname}',
@@ -323,7 +336,7 @@ def _process_basic(job_id, filepath, settings):
         cpath = os.path.join(config.CLIPS_FOLDER, fname)
         cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', filepath,
                '-t', str(end-start), '-vf', vf,
-               '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+               '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
                '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', cpath]
         r = subprocess.run(cmd, capture_output=True, timeout=120)
         if r.returncode == 0 and os.path.exists(cpath):
