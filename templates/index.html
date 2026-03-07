@@ -42,7 +42,7 @@
       linear-gradient(90deg, rgba(124,77,255,0.04) 1px, transparent 1px);
     background-size: 60px 60px;
     pointer-events: none;
-    z-index: 0;
+    z-index: -1;
   }
 
   .orb {
@@ -50,13 +50,13 @@
     border-radius: 50%;
     filter: blur(80px);
     pointer-events: none;
-    z-index: 0;
-    opacity: 0.35;
+    z-index: -1;
+    opacity: 0.25;
     animation: orb-float 8s ease-in-out infinite;
   }
-  .orb-1 { width: 400px; height: 400px; background: var(--accent); top: -100px; right: -100px; }
-  .orb-2 { width: 300px; height: 300px; background: var(--accent2); bottom: -50px; left: -50px; animation-delay: -3s; }
-  .orb-3 { width: 200px; height: 200px; background: var(--accent3); top: 50%; left: 50%; animation-delay: -5s; }
+  .orb-1 { width: 300px; height: 300px; background: var(--accent); top: -100px; right: -100px; }
+  .orb-2 { width: 200px; height: 200px; background: var(--accent2); bottom: -50px; left: -50px; animation-delay: -3s; }
+  .orb-3 { width: 150px; height: 150px; background: var(--accent3); top: 50%; left: 50%; animation-delay: -5s; }
 
   @keyframes orb-float {
     0%, 100% { transform: translateY(0) scale(1); }
@@ -65,7 +65,7 @@
 
   .container {
     position: relative;
-    z-index: 1;
+    z-index: 2;
     max-width: 900px;
     margin: 0 auto;
     padding: 20px 16px 60px;
@@ -168,7 +168,8 @@
   }
   .tab {
     flex: 1;
-    padding: 12px;
+    padding: 14px 12px;
+    min-height: 52px;
     border: none;
     background: transparent;
     color: var(--text2);
@@ -182,6 +183,8 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
   .tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
   .tab.active {
@@ -233,6 +236,8 @@
     transition: all 0.2s;
     text-decoration: none;
     white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
   .btn-primary {
     background: linear-gradient(135deg, var(--accent), #9c6dff);
@@ -681,8 +686,8 @@
     <div class="card-title"><span class="icon">🎬</span> Add Your Video</div>
 
     <div class="tabs">
-      <button class="tab active" onclick="switchTab('url')">🔗 Paste URL</button>
-      <button class="tab" onclick="switchTab('upload')">📱 Upload File</button>
+      <button class="tab active" data-tab="url" id="tabUrl">🔗 Paste URL</button>
+      <button class="tab" data-tab="upload" id="tabUpload">📱 Upload File</button>
     </div>
 
     <!-- URL Panel -->
@@ -730,4 +735,567 @@
 
     <!-- Settings -->
     <div style="margin-top:24px;">
-      <div class="card-title" style="font-size:15px; margin-bottom:14px;"><span class="icon">⚙️</span> Clip S
+      <div class="card-title" style="font-size:15px; margin-bottom:14px;"><span class="icon">⚙️</span> Clip Settings</div>
+      
+      <div style="margin-bottom:16px;">
+        <label style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:10px;">Clip Lengths</label>
+        <div class="duration-pills">
+          <span class="pill" onclick="toggleDuration(15,this)">15s</span>
+          <span class="pill selected" onclick="toggleDuration(30,this)">30s</span>
+          <span class="pill" onclick="toggleDuration(60,this)">60s</span>
+        </div>
+      </div>
+
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label>Max Clips</label>
+          <select class="select" id="maxClips">
+            <option value="3">3 clips</option>
+            <option value="5" selected>5 clips</option>
+            <option value="8">8 clips</option>
+            <option value="10">10 clips</option>
+          </select>
+        </div>
+        <div class="setting-item">
+          <label>Orientation</label>
+          <select class="select" id="orientation">
+            <option value="vertical" selected>Vertical (9:16) TikTok/Reels</option>
+            <option value="horizontal">Horizontal (16:9) YouTube</option>
+            <option value="square">Square (1:1) Instagram</option>
+          </select>
+        </div>
+        <div class="setting-item">
+          <label>🎬 Transition Effect</label>
+          <select class="select" id="transition">
+            <option value="fade" selected>Fade (smooth)</option>
+            <option value="fadeblack">Fade through Black</option>
+            <option value="fadewhite">Fade through White</option>
+            <option value="zoomin">Zoom In (Ken Burns)</option>
+            <option value="zoomout">Zoom Out (Ken Burns)</option>
+            <option value="blur">Blur Fade</option>
+            <option value="random">🎲 Random each clip</option>
+          </select>
+        </div>
+        <div class="setting-item">
+          <label>🎵 Background Music</label>
+          <select class="select" id="musicMood" onchange="toggleMusicVolume(this.value)">
+            <option value="none" selected>No Music</option>
+            <option value="hype">🔥 Hype (fast bass beat)</option>
+            <option value="dramatic">🎬 Dramatic (cinematic bass)</option>
+            <option value="motivational">💪 Motivational</option>
+            <option value="chill">😌 Chill (lo-fi bass)</option>
+            <option value="dark">🌑 Dark atmospheric</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="musicVolumeWrap" style="display:none; margin-top:14px;">
+        <label style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:8px;">
+          🎚️ Music Volume — <span id="musicVolumeVal">15%</span>
+        </label>
+        <input type="range" id="musicVolume" min="5" max="40" value="15"
+          oninput="document.getElementById('musicVolumeVal').textContent=this.value+'%'"
+          style="width:100%; accent-color:var(--accent); cursor:pointer; margin-top:4px;">
+      </div>
+
+      <div style="margin-top:16px; border-top:1px solid var(--border); padding-top:16px;">
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">🔤 Auto Subtitles</div>
+            <div class="toggle-sub">Burn captions into clips</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="addSubtitles" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">🎙️ Deep Bass Voice Narration</div>
+            <div class="toggle-sub">TikTok-style deep male voice over clips</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="addVoice" onchange="toggleVoiceSelect(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div id="voiceSelectWrap" style="display:none; padding:12px 0 4px;">
+          <label style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:8px;">Voice Style</label>
+          <select class="select" id="voiceStyle">
+            <option value="DeepBass" selected>🎙️ DeepBass — TikTok default</option>
+            <option value="TikTokNarrator">🎤 TikTok Narrator</option>
+            <option value="Cinema">🎬 Cinema — movie trailer deep</option>
+            <option value="Hype">⚡ Hype — energetic</option>
+            <option value="Smooth">😎 Smooth — cool</option>
+            <option value="Maya">💫 Maya — female warm</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-header">
+        <span class="progress-label" id="progressLabel">Processing...</span>
+        <span class="progress-pct" id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+      <div class="progress-message" id="progressMsg"></div>
+    </div>
+
+    <!-- Submit -->
+    <div style="margin-top:24px; display:flex; gap:12px; flex-wrap:wrap;">
+      <button class="btn btn-primary" id="processBtn" onclick="startProcessing()" style="flex:1; min-width:200px;">
+        ✂️ Generate Clips
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="resetForm()">Reset</button>
+    </div>
+  </div>
+
+  <!-- ── Clips Results ── -->
+  <div class="clips-section" id="clipsSection">
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="icon">🎯</span> Your Clips
+          <span id="clipsCount" style="font-size:13px;color:var(--text2);font-weight:400;"></span>
+        </div>
+        <button class="btn btn-success btn-sm" onclick="downloadAll()">⬇️ Download All</button>
+      </div>
+      <div class="clips-grid" id="clipsGrid"></div>
+    </div>
+  </div>
+
+  <!-- Jobs History -->
+  <div class="card" id="historyCard" style="display:none;">
+    <div class="card-title"><span class="icon">📋</span> Recent Jobs</div>
+    <div class="jobs-list" id="jobsList"></div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ────────────────────────────────────────────────
+let currentJobId = null;
+let pollInterval = null;
+let selectedDurations = [30];
+let selectedFile = null;
+let activeVideoEl = null; // track which video is playing
+
+// ─── Init ─────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  checkHealth();
+  loadJobs();
+  setupDragDrop();
+});
+
+async function checkHealth() {
+  try {
+    const r = await fetch('/health');
+    const data = await r.json();
+    const dot = document.getElementById('modeDot');
+    const txt = document.getElementById('modeText');
+    if (data.mode === 'full') {
+      dot.classList.add('full');
+      txt.textContent = 'AI Mode — Full features active';
+    } else {
+      txt.textContent = 'Basic Mode — FFmpeg only (AI modules not installed)';
+    }
+  } catch {
+    document.getElementById('modeText').textContent = 'Server starting...';
+  }
+}
+
+// ─── Tab switching ────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  document.getElementById('panel-url').classList.toggle('active', tab === 'url');
+  document.getElementById('panel-upload').classList.toggle('active', tab === 'upload');
+}
+
+// Attach tab listeners after DOM ready (works on all Android browsers)
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  btn.addEventListener('touchend', (e) => { e.preventDefault(); switchTab(btn.dataset.tab); });
+});
+
+function toggleMusicVolume(val) {
+  document.getElementById('musicVolumeWrap').style.display = val !== 'none' ? 'block' : 'none';
+}
+
+function toggleVoiceSelect(checked) {
+  document.getElementById('voiceSelectWrap').style.display = checked ? 'block' : 'none';
+}
+
+function toggleDuration(val, el) {
+  el.classList.toggle('selected');
+  if (el.classList.contains('selected')) {
+    if (!selectedDurations.includes(val)) selectedDurations.push(val);
+  } else {
+    selectedDurations = selectedDurations.filter(d => d !== val);
+  }
+  if (selectedDurations.length === 0) {
+    selectedDurations = [30];
+    document.querySelectorAll('.pill').forEach(p => {
+      if (p.textContent === '30s') p.classList.add('selected');
+    });
+  }
+}
+
+// ─── File handling ────────────────────────────────────────
+function handleFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  selectedFile = file;
+  const sizeStr = (file.size / (1024*1024)).toFixed(1) + 'MB';
+  document.getElementById('selectedFile').style.display = 'block';
+  document.getElementById('selectedFile').textContent = `✓ ${file.name} (${sizeStr})`;
+  showToast(`File selected: ${file.name}`, 'success');
+}
+
+function setupDragDrop() {
+  const zone = document.getElementById('uploadZone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const files = e.dataTransfer.files;
+    if (files[0]) {
+      document.getElementById('fileInput').files = files;
+      handleFileSelect(document.getElementById('fileInput'));
+    }
+  });
+}
+
+// ─── URL preview ──────────────────────────────────────────
+async function fetchUrlInfo() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) return;
+  document.getElementById('fetchBtn').textContent = '...';
+  document.getElementById('previewTitle').textContent = url.split('/').pop() || 'Video';
+  document.getElementById('previewMeta').textContent = 'Ready to process';
+  document.getElementById('urlPreview').style.display = 'block';
+  document.getElementById('fetchBtn').textContent = '✓';
+  setTimeout(() => document.getElementById('fetchBtn').textContent = 'Preview', 2000);
+}
+
+// ─── Start processing ─────────────────────────────────────
+async function startProcessing() {
+  const activeTab = document.querySelector('.tab.active').textContent.includes('URL') ? 'url' : 'upload';
+  if (activeTab === 'url') {
+    const url = document.getElementById('urlInput').value.trim();
+    if (!url) { showToast('Please paste a video URL', 'error'); return; }
+    await submitUrl(url);
+  } else {
+    if (!selectedFile) { showToast('Please select a video file', 'error'); return; }
+    await submitFile();
+  }
+}
+
+async function submitUrl(url) {
+  setProcessing(true);
+  try {
+    const payload = {
+      url,
+      clip_durations: selectedDurations,
+      max_clips: parseInt(document.getElementById('maxClips').value),
+      add_subtitles: document.getElementById('addSubtitles').checked,
+      add_voice: document.getElementById('addVoice').checked,
+      orientation: document.getElementById('orientation').value,
+      transition: document.getElementById('transition').value,
+      music_mood: document.getElementById('musicMood').value,
+      music_volume: parseInt(document.getElementById('musicVolume').value) / 100,
+      voice_style: document.getElementById('voiceStyle').value,
+    };
+    const r = await fetch('/api/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    currentJobId = data.job_id;
+    startPolling();
+  } catch (e) {
+    setProcessing(false);
+    showToast(e.message, 'error');
+  }
+}
+
+async function submitFile() {
+  setProcessing(true);
+  try {
+    const form = new FormData();
+    form.append('video', selectedFile);
+    form.append('clip_durations', JSON.stringify(selectedDurations));
+    form.append('max_clips', document.getElementById('maxClips').value);
+    form.append('add_subtitles', document.getElementById('addSubtitles').checked);
+    form.append('add_voice', document.getElementById('addVoice').checked);
+    form.append('orientation', document.getElementById('orientation').value);
+    form.append('transition', document.getElementById('transition').value);
+    form.append('music_mood', document.getElementById('musicMood').value);
+    form.append('music_volume', parseInt(document.getElementById('musicVolume').value) / 100);
+    form.append('voice_style', document.getElementById('voiceStyle').value);
+    const r = await fetch('/api/upload', { method: 'POST', body: form });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    currentJobId = data.job_id;
+    startPolling();
+  } catch (e) {
+    setProcessing(false);
+    showToast(e.message, 'error');
+  }
+}
+
+// ─── Polling ──────────────────────────────────────────────
+function startPolling() {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(pollJob, 1200);
+  pollJob();
+}
+
+async function pollJob() {
+  if (!currentJobId) return;
+  try {
+    const r = await fetch(`/api/job/${currentJobId}`);
+    const job = await r.json();
+    updateProgressUI(job);
+
+    if (['done', 'error', 'cancelled'].includes(job.status)) {
+      clearInterval(pollInterval);
+      setProcessing(false);
+
+      if (job.status === 'done') {
+        renderClips(job.clips, job.settings?.orientation);
+        showToast(`🎉 ${job.clips.length} clips ready!`, 'success');
+        loadJobs();
+      } else if (job.status === 'error') {
+        showToast('❌ ' + job.error, 'error');
+      }
+    }
+  } catch (e) {
+    console.error('Poll error:', e);
+  }
+}
+
+function updateProgressUI(job) {
+  const wrap = document.getElementById('progressWrap');
+  wrap.classList.add('visible');
+  const pct = job.progress || 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = pct + '%';
+  const labels = {
+    queued: 'Queued...', downloading: 'Downloading...', analyzing: 'Analyzing...',
+    scoring: 'Scoring virality...', clipping: 'Cutting clips...', done: 'Done!', error: 'Error'
+  };
+  document.getElementById('progressLabel').textContent = labels[job.status] || job.status;
+  document.getElementById('progressMsg').textContent = job.message || '';
+}
+
+// ─── Render clips (THE FIXED VERSION) ────────────────────
+function renderClips(clips, orientation) {
+  if (!clips || clips.length === 0) return;
+
+  const section  = document.getElementById('clipsSection');
+  const grid     = document.getElementById('clipsGrid');
+  const countEl  = document.getElementById('clipsCount');
+
+  countEl.textContent = `(${clips.length} clip${clips.length !== 1 ? 's' : ''})`;
+  grid.innerHTML = '';
+
+  clips.forEach((clip) => {
+    const scoreClass = clip.score >= 0.7 ? 'score-high' : clip.score >= 0.5 ? 'score-mid' : 'score-low';
+    const scoreEmoji = clip.score >= 0.7 ? '🔥' : clip.score >= 0.5 ? '⚡' : '📉';
+
+    // Determine aspect ratio class
+    let videoClass = 'clip-video';
+    if (orientation === 'horizontal') videoClass += ' horizontal';
+    else if (orientation === 'square') videoClass += ' square';
+
+    const card = document.createElement('div');
+    card.className = 'clip-card';
+
+    card.innerHTML = `
+      <div class="clip-player-wrap" onclick="togglePlay(this)">
+        <video class="${videoClass}"
+               src="${clip.url}"
+               preload="metadata"
+               playsinline
+               loop></video>
+        <div class="play-overlay" id="overlay-${clip.clip_number}">
+          <div class="play-btn-circle"><div class="play-icon"></div></div>
+        </div>
+      </div>
+      <div class="clip-info">
+        <div class="clip-title">
+          Clip #${clip.clip_number}
+          <span class="clip-score ${scoreClass}">${scoreEmoji} ${Math.round(clip.score * 100)}%</span>
+        </div>
+        <div class="clip-meta">
+          <span>⏱ ${clip.duration}s</span>
+          <span>📍 ${clip.start}s–${clip.end}s</span>
+          ${clip.voice ? `<span>🎙️ ${clip.voice}</span>` : ''}
+          ${clip.file_size ? `<span>${(clip.file_size/1024/1024).toFixed(1)}MB</span>` : ''}
+        </div>
+        ${clip.transcript ? `<div class="clip-transcript">${clip.transcript.substring(0,120)}${clip.transcript.length > 120 ? '...' : ''}</div>` : ''}
+        ${clip.summary && !clip.transcript ? `<div class="clip-transcript">${clip.summary}</div>` : ''}
+        <div class="clip-actions">
+          <a href="${clip.url}" download="${clip.filename || 'clip.mp4'}"
+             class="btn btn-success btn-sm" style="flex:1; text-align:center;">
+            ⬇️ Save to Phone
+          </a>
+          <button class="btn btn-danger" onclick="shareClip('${clip.url}')">Share</button>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+
+  section.classList.add('visible');
+  // Scroll to clips
+  setTimeout(() => section.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+}
+
+// ─── Video play/pause toggle ──────────────────────────────
+function togglePlay(wrapper) {
+  const video   = wrapper.querySelector('video');
+  const overlay = wrapper.querySelector('.play-overlay');
+
+  // Pause any other playing video first
+  if (activeVideoEl && activeVideoEl !== video) {
+    activeVideoEl.pause();
+    const prevOverlay = activeVideoEl.closest('.clip-player-wrap').querySelector('.play-overlay');
+    if (prevOverlay) prevOverlay.classList.remove('hidden');
+  }
+
+  if (video.paused) {
+    video.play();
+    overlay.classList.add('hidden');
+    activeVideoEl = video;
+  } else {
+    video.pause();
+    overlay.classList.remove('hidden');
+    activeVideoEl = null;
+  }
+}
+
+// ─── Jobs history ─────────────────────────────────────────
+async function loadJobs() {
+  try {
+    const r = await fetch('/api/jobs');
+    const jobs = await r.json();
+    if (jobs.length === 0) return;
+
+    const card = document.getElementById('historyCard');
+    const list = document.getElementById('jobsList');
+
+    list.innerHTML = '';
+    jobs.slice(0, 8).forEach(job => {
+      const item = document.createElement('div');
+      item.className = 'job-item';
+
+      // FIX: clicking a done job re-fetches it fresh to get full clip data
+      item.onclick = async () => {
+        if (job.status === 'done') {
+          try {
+            const jr = await fetch(`/api/job/${job.id}`);
+            const fullJob = await jr.json();
+            renderClips(fullJob.clips, fullJob.settings?.orientation);
+            showToast(`Loaded ${fullJob.clips.length} clips`, 'success');
+          } catch(e) {
+            showToast('Could not load clips', 'error');
+          }
+        }
+      };
+
+      const emoji    = job.source === 'url' ? '🔗' : '📁';
+      const name     = job.filename || (job.url ? job.url.substring(0, 50) + '...' : 'Video');
+      const clipCount = job.clips?.length || 0;
+
+      item.innerHTML = `
+        <div class="job-thumb">${emoji}</div>
+        <div class="job-info">
+          <div class="job-name">${name}</div>
+          <div class="job-sub">
+            <span class="status-badge status-${job.status}">${job.status}</span>
+            ${clipCount > 0 ? ` · ${clipCount} clips — <span style="color:var(--accent2);font-weight:600;">tap to view</span>` : ''}
+          </div>
+        </div>
+        <button class="btn btn-danger" onclick="event.stopPropagation(); deleteJob('${job.id}', this)">✕</button>
+      `;
+      list.appendChild(item);
+    });
+
+    card.style.display = 'block';
+  } catch (e) {
+    console.error('Load jobs error:', e);
+  }
+}
+
+async function deleteJob(id, btn) {
+  try {
+    await fetch(`/api/delete/${id}`, { method: 'DELETE' });
+    btn.closest('.job-item').remove();
+    showToast('Job deleted', 'success');
+  } catch (e) {
+    showToast('Failed to delete', 'error');
+  }
+}
+
+// ─── Utilities ────────────────────────────────────────────
+function setProcessing(active) {
+  const btn = document.getElementById('processBtn');
+  btn.disabled = active;
+  btn.textContent = active ? '⏳ Processing...' : '✂️ Generate Clips';
+  if (!active) {
+    document.getElementById('progressWrap').classList.remove('visible');
+  }
+}
+
+function resetForm() {
+  currentJobId = null;
+  selectedFile = null;
+  if (pollInterval) clearInterval(pollInterval);
+  document.getElementById('urlInput').value = '';
+  document.getElementById('selectedFile').style.display = 'none';
+  document.getElementById('urlPreview').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+  document.getElementById('clipsSection').classList.remove('visible');
+  document.getElementById('progressWrap').classList.remove('visible');
+  setProcessing(false);
+}
+
+function downloadAll() {
+  document.querySelectorAll('.clip-card a[download]').forEach((a, i) => {
+    setTimeout(() => a.click(), i * 800); // stagger downloads so browser doesn't block them
+  });
+}
+
+async function shareClip(url) {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Check out this clip!', url: window.location.origin + url });
+    } catch(e) {}
+  } else {
+    await navigator.clipboard.writeText(window.location.origin + url);
+    showToast('Link copied!', 'success');
+  }
+}
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>
