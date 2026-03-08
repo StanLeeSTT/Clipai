@@ -25,14 +25,14 @@ ClipAI is an open-source alternative to Opus Clip and Vizard AI that runs **enti
 ### One-Command Install
 
 ```bash
-curl -sL https://raw.githubusercontent.com/YOUR_USERNAME/clipai/main/install.sh | bash
+curl -sL https://raw.githubusercontent.com/Sranleestt/clipai/main/install.sh | bash
 ```
 
 ### Manual Setup
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/YOUR_USERNAME/clipai.git
+git clone https://github.com/Stanleestt/clipai.git
 cd clipai
 
 # 2. Run the installer (handles everything)
@@ -59,7 +59,7 @@ http://YOUR_PHONE_IP:5000
 ## 🖥️ Desktop / Linux Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/clipai.git
+git clone https://github.com/Stanleestt/clipai.git
 cd clipai
 pip install -r requirements.txt
 python app.py
